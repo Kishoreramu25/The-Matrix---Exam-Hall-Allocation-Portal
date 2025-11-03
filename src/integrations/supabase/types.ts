@@ -14,8 +14,67 @@ export type Database = {
   }
   public: {
     Tables: {
+      departments: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+        }
+        Relationships: []
+      }
+      exam_departments: {
+        Row: {
+          created_at: string
+          department_id: string
+          exam_id: string
+          id: string
+          student_count: number
+        }
+        Insert: {
+          created_at?: string
+          department_id: string
+          exam_id: string
+          id?: string
+          student_count?: number
+        }
+        Update: {
+          created_at?: string
+          department_id?: string
+          exam_id?: string
+          id?: string
+          student_count?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "exam_departments_department_id_fkey"
+            columns: ["department_id"]
+            isOneToOne: false
+            referencedRelation: "departments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "exam_departments_exam_id_fkey"
+            columns: ["exam_id"]
+            isOneToOne: false
+            referencedRelation: "exams"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       exams: {
         Row: {
+          bench_columns: number | null
+          bench_rows: number | null
           created_at: string
           created_by: string | null
           exam_code: string
@@ -28,6 +87,8 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          bench_columns?: number | null
+          bench_rows?: number | null
           created_at?: string
           created_by?: string | null
           exam_code: string
@@ -40,6 +101,8 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          bench_columns?: number | null
+          bench_rows?: number | null
           created_at?: string
           created_by?: string | null
           exam_code?: string
@@ -116,6 +179,7 @@ export type Database = {
         Row: {
           column_number: number | null
           created_at: string
+          department_name: string | null
           exam_id: string
           hall_id: string
           id: string
@@ -123,10 +187,12 @@ export type Database = {
           row_number: number | null
           seat_number: number
           student_name: string
+          subject_id: string | null
         }
         Insert: {
           column_number?: number | null
           created_at?: string
+          department_name?: string | null
           exam_id: string
           hall_id: string
           id?: string
@@ -134,10 +200,12 @@ export type Database = {
           row_number?: number | null
           seat_number: number
           student_name: string
+          subject_id?: string | null
         }
         Update: {
           column_number?: number | null
           created_at?: string
+          department_name?: string | null
           exam_id?: string
           hall_id?: string
           id?: string
@@ -145,6 +213,7 @@ export type Database = {
           row_number?: number | null
           seat_number?: number
           student_name?: string
+          subject_id?: string | null
         }
         Relationships: [
           {
@@ -159,6 +228,48 @@ export type Database = {
             columns: ["hall_id"]
             isOneToOne: false
             referencedRelation: "halls"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "seat_allocations_subject_id_fkey"
+            columns: ["subject_id"]
+            isOneToOne: false
+            referencedRelation: "subjects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      subjects: {
+        Row: {
+          created_at: string
+          exam_id: string
+          id: string
+          subject_code: string | null
+          subject_name: string
+          use_shared_seating: boolean
+        }
+        Insert: {
+          created_at?: string
+          exam_id: string
+          id?: string
+          subject_code?: string | null
+          subject_name: string
+          use_shared_seating?: boolean
+        }
+        Update: {
+          created_at?: string
+          exam_id?: string
+          id?: string
+          subject_code?: string | null
+          subject_name?: string
+          use_shared_seating?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "subjects_exam_id_fkey"
+            columns: ["exam_id"]
+            isOneToOne: false
+            referencedRelation: "exams"
             referencedColumns: ["id"]
           },
         ]
