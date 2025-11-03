@@ -1,6 +1,7 @@
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { MapPin, User, Hash, Grid } from "lucide-react";
+import { MapPin, User, Hash, Grid, Building } from "lucide-react";
+import { useState } from "react";
 
 interface SeatAllocationViewProps {
   allocation: {
@@ -14,9 +15,10 @@ interface SeatAllocationViewProps {
 
 const SeatAllocationView = ({ allocation, onReset }: SeatAllocationViewProps) => {
   const { exam, student, hall, allSeats } = allocation;
+  const [selectedSeat, setSelectedSeat] = useState<any>(null);
 
-  const rows = Math.ceil(hall.capacity / 10);
-  const seatsPerRow = 10;
+  const rows = exam.bench_rows || Math.ceil(hall.capacity / 10);
+  const cols = exam.bench_columns || 10;
 
   const getSeatAt = (row: number, col: number) => {
     return allSeats.find(
@@ -76,6 +78,16 @@ const SeatAllocationView = ({ allocation, onReset }: SeatAllocationViewProps) =>
               <p className="font-semibold">Seat {student.seat_number}</p>
             </div>
           </div>
+
+          {student.department_name && (
+            <div className="flex items-center gap-3 p-4 bg-secondary/50 rounded-lg">
+              <Building className="h-5 w-5 text-primary" />
+              <div>
+                <p className="text-sm text-muted-foreground">Department</p>
+                <p className="font-semibold">{student.department_name}</p>
+              </div>
+            </div>
+          )}
         </div>
       </Card>
 
@@ -90,32 +102,55 @@ const SeatAllocationView = ({ allocation, onReset }: SeatAllocationViewProps) =>
             {Array.from({ length: rows }, (_, rowIndex) => (
               <div key={rowIndex} className="flex gap-2 mb-2">
                 <div className="w-12 flex items-center justify-center text-sm font-semibold text-muted-foreground">
-                  Row {rowIndex + 1}
+                  R{rowIndex + 1}
                 </div>
-                {Array.from({ length: seatsPerRow }, (_, colIndex) => {
+                {Array.from({ length: cols }, (_, colIndex) => {
                   const seat = getSeatAt(rowIndex + 1, colIndex + 1);
                   const isUserSeat = seat?.id === student.id;
 
                   return (
-                    <div
+                    <button
                       key={colIndex}
-                      className={`flex-1 min-w-[50px] h-12 flex items-center justify-center text-xs font-medium rounded border transition-all ${
+                      onClick={() => seat && setSelectedSeat(seat)}
+                      className={`flex-1 min-w-[50px] h-12 flex flex-col items-center justify-center text-xs font-medium rounded border transition-all ${
                         seat
                           ? isUserSeat
-                            ? "bg-primary text-primary-foreground border-primary shadow-lg scale-110"
-                            : "bg-card hover:bg-muted border-border"
-                          : "bg-muted/30 border-dashed border-muted-foreground/20"
+                            ? "bg-primary text-primary-foreground border-primary shadow-lg scale-110 cursor-default"
+                            : "bg-card hover:bg-muted border-border cursor-pointer hover:scale-105"
+                          : "bg-muted/30 border-dashed border-muted-foreground/20 cursor-default"
                       }`}
-                      title={seat ? `${seat.student_name} - ${seat.registration_number}` : "Empty"}
+                      title={seat ? `Click to view details` : "Empty"}
+                      disabled={!seat}
                     >
-                      {seat ? seat.seat_number : "-"}
-                    </div>
+                      {seat && (
+                        <>
+                          <span className="font-bold">{seat.seat_number}</span>
+                          {seat.department_name && (
+                            <span className="text-[10px] opacity-70">{seat.department_name}</span>
+                          )}
+                        </>
+                      )}
+                      {!seat && "-"}
+                    </button>
                   );
                 })}
               </div>
             ))}
           </div>
         </div>
+
+        {selectedSeat && (
+          <Card className="mt-4 p-4 bg-accent/10 border-accent">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="font-semibold text-lg">{selectedSeat.student_name}</p>
+                <p className="text-sm text-muted-foreground">Reg: {selectedSeat.registration_number}</p>
+                <p className="text-sm text-muted-foreground">Seat: {selectedSeat.seat_number} | {selectedSeat.department_name}</p>
+              </div>
+              <Button variant="ghost" size="sm" onClick={() => setSelectedSeat(null)}>Close</Button>
+            </div>
+          </Card>
+        )}
 
         <div className="mt-6 flex items-center gap-6 text-sm">
           <div className="flex items-center gap-2">

@@ -5,29 +5,47 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
+import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
-import { ArrowLeft, Upload } from "lucide-react";
+import { ArrowLeft, Upload, Trash2 } from "lucide-react";
 import { z } from "zod";
 
 const examSchema = z.object({
   examName: z.string().min(3, "Exam name must be at least 3 characters"),
   examCode: z.string().min(3, "Exam code must be at least 3 characters"),
-  totalStudents: z.number().min(1, "Total students must be at least 1"),
   numberOfHalls: z.number().min(1, "Number of halls must be at least 1"),
-  studentsPerHall: z.number().min(1, "Students per hall must be at least 1"),
+  benchRows: z.number().min(1, "Rows must be at least 1"),
+  benchColumns: z.number().min(1, "Columns must be at least 1"),
+  numberOfSubjects: z.number().min(1, "At least 1 subject required"),
+  numberOfDepartments: z.number().min(1, "At least 1 department required"),
 });
+
+interface Subject {
+  name: string;
+  code: string;
+}
+
+interface Department {
+  name: string;
+  file: File | null;
+  students: any[];
+}
 
 const CreateExam = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
-  const [studentFile, setStudentFile] = useState<File | null>(null);
   const [hallNames, setHallNames] = useState<string[]>([]);
+  const [subjects, setSubjects] = useState<Subject[]>([{ name: "", code: "" }]);
+  const [departments, setDepartments] = useState<Department[]>([{ name: "", file: null, students: [] }]);
+  const [useSharedSeating, setUseSharedSeating] = useState(true);
   const [formData, setFormData] = useState({
     examName: "",
     examCode: "",
-    totalStudents: 0,
     numberOfHalls: 0,
-    studentsPerHall: 0,
+    benchRows: 0,
+    benchColumns: 0,
+    numberOfSubjects: 1,
+    numberOfDepartments: 1,
   });
 
   const handleNumberOfHallsChange = (value: number) => {
@@ -41,7 +59,31 @@ const CreateExam = () => {
     setHallNames(newNames);
   };
 
-  const parseStudentFile = async (file: File): Promise<any[]> => {
+  const handleNumberOfSubjectsChange = (value: number) => {
+    setFormData({ ...formData, numberOfSubjects: value });
+    const newSubjects = Array(value).fill(null).map((_, i) => subjects[i] || { name: "", code: "" });
+    setSubjects(newSubjects);
+  };
+
+  const handleSubjectChange = (index: number, field: keyof Subject, value: string) => {
+    const newSubjects = [...subjects];
+    newSubjects[index] = { ...newSubjects[index], [field]: value };
+    setSubjects(newSubjects);
+  };
+
+  const handleNumberOfDepartmentsChange = (value: number) => {
+    setFormData({ ...formData, numberOfDepartments: value });
+    const newDepts = Array(value).fill(null).map((_, i) => departments[i] || { name: "", file: null, students: [] });
+    setDepartments(newDepts);
+  };
+
+  const handleDepartmentChange = (index: number, field: keyof Department, value: any) => {
+    const newDepts = [...departments];
+    newDepts[index] = { ...newDepts[index], [field]: value };
+    setDepartments(newDepts);
+  };
+
+  const parseStudentFile = async (file: File, deptName: string): Promise<any[]> => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = (e) => {
@@ -50,7 +92,7 @@ const CreateExam = () => {
           const lines = text.split("\n").filter((line) => line.trim());
           const students = lines.slice(1).map((line) => {
             const [name, regNumber] = line.split(",").map((s) => s.trim());
-            return { name, registration_number: regNumber };
+            return { name, registration_number: regNumber, department: deptName };
           });
           resolve(students);
         } catch (error) {
@@ -62,6 +104,71 @@ const CreateExam = () => {
     });
   };
 
+  const handleDepartmentFileUpload = async (index: number, file: File | null) => {
+    if (!file) return;
+    try {
+      const students = await parseStudentFile(file, departments[index].name);
+      handleDepartmentChange(index, "students", students);
+      handleDepartmentChange(index, "file", file);
+      toast.success(`Loaded ${students.length} students from ${departments[index].name}`);
+    } catch (error) {
+      toast.error("Failed to parse CSV file");
+    }
+  };
+
+  const allocateSeatsRoundRobin = (allStudents: any[], rows: number, cols: number, hallId: string, subjectId?: string) => {
+    const totalSeats = rows * cols;
+    const deptGroups: { [key: string]: any[] } = {};
+    
+    allStudents.forEach(student => {
+      if (!deptGroups[student.department]) {
+        deptGroups[student.department] = [];
+      }
+      deptGroups[student.department].push(student);
+    });
+
+    const deptNames = Object.keys(deptGroups);
+    const allocations = [];
+    let currentDeptIndex = 0;
+    let deptPointers = Object.fromEntries(deptNames.map(dept => [dept, 0]));
+
+    for (let row = 1; row <= rows; row++) {
+      for (let col = 1; col <= cols; col++) {
+        let assigned = false;
+        let attempts = 0;
+        
+        while (!assigned && attempts < deptNames.length) {
+          const currentDept = deptNames[currentDeptIndex];
+          const students = deptGroups[currentDept];
+          const pointer = deptPointers[currentDept];
+
+          if (pointer < students.length) {
+            const student = students[pointer];
+            allocations.push({
+              hall_id: hallId,
+              student_name: student.name,
+              registration_number: student.registration_number,
+              department_name: student.department,
+              seat_number: allocations.length + 1,
+              row_number: row,
+              column_number: col,
+              subject_id: subjectId,
+            });
+            deptPointers[currentDept]++;
+            assigned = true;
+          }
+
+          currentDeptIndex = (currentDeptIndex + 1) % deptNames.length;
+          attempts++;
+        }
+
+        if (!assigned) break;
+      }
+    }
+
+    return allocations;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -69,41 +176,47 @@ const CreateExam = () => {
     try {
       const validatedData = examSchema.parse({
         ...formData,
-        totalStudents: Number(formData.totalStudents),
         numberOfHalls: Number(formData.numberOfHalls),
-        studentsPerHall: Number(formData.studentsPerHall),
+        benchRows: Number(formData.benchRows),
+        benchColumns: Number(formData.benchColumns),
+        numberOfSubjects: Number(formData.numberOfSubjects),
+        numberOfDepartments: Number(formData.numberOfDepartments),
       });
 
-      if (!studentFile) {
-        toast.error("Please upload a student list file");
+      // Validate departments have files
+      if (departments.some(d => !d.name || !d.file)) {
+        toast.error("Please provide names and CSV files for all departments");
         setLoading(false);
         return;
       }
 
-      const students = await parseStudentFile(studentFile);
-
-      if (students.length !== validatedData.totalStudents) {
-        toast.error(
-          `Student count mismatch. Expected ${validatedData.totalStudents}, got ${students.length}`
-        );
+      // Validate subjects
+      if (subjects.some(s => !s.name)) {
+        toast.error("Please provide names for all subjects");
         setLoading(false);
         return;
       }
 
-      // Create exam
       const {
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated");
 
+      // Gather all students
+      const allStudents = departments.flatMap(d => d.students);
+      const totalSeats = validatedData.benchRows * validatedData.benchColumns * validatedData.numberOfHalls;
+
+      // Create exam
       const { data: exam, error: examError } = await supabase
         .from("exams")
         .insert({
           exam_code: validatedData.examCode,
           exam_name: validatedData.examName,
-          total_students: validatedData.totalStudents,
+          total_students: allStudents.length,
           number_of_halls: validatedData.numberOfHalls,
-          students_per_hall: validatedData.studentsPerHall,
+          students_per_hall: validatedData.benchRows * validatedData.benchColumns,
+          bench_rows: validatedData.benchRows,
+          bench_columns: validatedData.benchColumns,
           created_by: user.id,
           status: "published",
         })
@@ -112,11 +225,54 @@ const CreateExam = () => {
 
       if (examError) throw examError;
 
+      // Create or get departments
+      const deptIds: { [name: string]: string } = {};
+      for (const dept of departments) {
+        const { data: existingDept } = await supabase
+          .from("departments")
+          .select("id")
+          .eq("name", dept.name)
+          .maybeSingle();
+
+        if (existingDept) {
+          deptIds[dept.name] = existingDept.id;
+        } else {
+          const { data: newDept, error } = await supabase
+            .from("departments")
+            .insert({ name: dept.name })
+            .select()
+            .single();
+          if (error) throw error;
+          deptIds[dept.name] = newDept.id;
+        }
+
+        await supabase.from("exam_departments").insert({
+          exam_id: exam.id,
+          department_id: deptIds[dept.name],
+          student_count: dept.students.length,
+        });
+      }
+
+      // Create subjects
+      const { data: subjectsData, error: subjectsError } = await supabase
+        .from("subjects")
+        .insert(
+          subjects.map(s => ({
+            exam_id: exam.id,
+            subject_name: s.name,
+            subject_code: s.code,
+            use_shared_seating: useSharedSeating,
+          }))
+        )
+        .select();
+
+      if (subjectsError) throw subjectsError;
+
       // Create halls
       const hallsToInsert = hallNames.map((name, index) => ({
         exam_id: exam.id,
         hall_name: name || `Hall ${index + 1}`,
-        capacity: validatedData.studentsPerHall,
+        capacity: validatedData.benchRows * validatedData.benchColumns,
       }));
 
       const { data: halls, error: hallsError } = await supabase
@@ -126,39 +282,46 @@ const CreateExam = () => {
 
       if (hallsError) throw hallsError;
 
-      // Allocate students to halls
-      const allocations = [];
-      let studentIndex = 0;
-
-      for (let hallIndex = 0; hallIndex < halls.length; hallIndex++) {
-        const hall = halls[hallIndex];
-        const studentsInHall = Math.min(
-          validatedData.studentsPerHall,
-          students.length - studentIndex
-        );
-
-        for (let seat = 1; seat <= studentsInHall; seat++) {
-          const student = students[studentIndex];
-          allocations.push({
-            exam_id: exam.id,
-            hall_id: hall.id,
-            student_name: student.name,
-            registration_number: student.registration_number,
-            seat_number: seat,
-            row_number: Math.ceil(seat / 10),
-            column_number: ((seat - 1) % 10) + 1,
-          });
-          studentIndex++;
+      // Allocate seats
+      const allAllocations = [];
+      
+      if (useSharedSeating) {
+        // Same seating for all subjects
+        for (const hall of halls) {
+          const hallAllocations = allocateSeatsRoundRobin(
+            allStudents.slice(0, validatedData.benchRows * validatedData.benchColumns),
+            validatedData.benchRows,
+            validatedData.benchColumns,
+            hall.id
+          );
+          allAllocations.push(...hallAllocations.map(a => ({ ...a, exam_id: exam.id })));
+          allStudents.splice(0, hallAllocations.length);
+        }
+      } else {
+        // Different seating per subject
+        for (const subject of subjectsData) {
+          const subjectStudents = [...allStudents];
+          for (const hall of halls) {
+            const hallAllocations = allocateSeatsRoundRobin(
+              subjectStudents.slice(0, validatedData.benchRows * validatedData.benchColumns),
+              validatedData.benchRows,
+              validatedData.benchColumns,
+              hall.id,
+              subject.id
+            );
+            allAllocations.push(...hallAllocations.map(a => ({ ...a, exam_id: exam.id })));
+            subjectStudents.splice(0, hallAllocations.length);
+          }
         }
       }
 
       const { error: allocationsError } = await supabase
         .from("seat_allocations")
-        .insert(allocations);
+        .insert(allAllocations);
 
       if (allocationsError) throw allocationsError;
 
-      toast.success("Exam created successfully");
+      toast.success("Exam created successfully with smart seat allocation!");
       navigate("/admin");
     } catch (error: any) {
       if (error instanceof z.ZodError) {
@@ -213,17 +376,28 @@ const CreateExam = () => {
 
             <div className="grid md:grid-cols-3 gap-4">
               <div>
-                <Label htmlFor="totalStudents">Total Students</Label>
+                <Label htmlFor="numberOfSubjects">Number of Subjects</Label>
                 <Input
-                  id="totalStudents"
+                  id="numberOfSubjects"
                   type="number"
                   min="1"
-                  value={formData.totalStudents || ""}
+                  value={formData.numberOfSubjects || ""}
                   onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      totalStudents: parseInt(e.target.value) || 0,
-                    })
+                    handleNumberOfSubjectsChange(parseInt(e.target.value) || 1)
+                  }
+                  required
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="numberOfDepartments">Number of Departments</Label>
+                <Input
+                  id="numberOfDepartments"
+                  type="number"
+                  min="1"
+                  value={formData.numberOfDepartments || ""}
+                  onChange={(e) =>
+                    handleNumberOfDepartmentsChange(parseInt(e.target.value) || 1)
                   }
                   required
                 />
@@ -242,18 +416,37 @@ const CreateExam = () => {
                   required
                 />
               </div>
+            </div>
 
+            <div className="grid md:grid-cols-2 gap-4">
               <div>
-                <Label htmlFor="studentsPerHall">Students Per Hall</Label>
+                <Label htmlFor="benchRows">Bench Rows</Label>
                 <Input
-                  id="studentsPerHall"
+                  id="benchRows"
                   type="number"
                   min="1"
-                  value={formData.studentsPerHall || ""}
+                  value={formData.benchRows || ""}
                   onChange={(e) =>
                     setFormData({
                       ...formData,
-                      studentsPerHall: parseInt(e.target.value) || 0,
+                      benchRows: parseInt(e.target.value) || 0,
+                    })
+                  }
+                  required
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="benchColumns">Bench Columns</Label>
+                <Input
+                  id="benchColumns"
+                  type="number"
+                  min="1"
+                  value={formData.benchColumns || ""}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      benchColumns: parseInt(e.target.value) || 0,
                     })
                   }
                   required
@@ -261,21 +454,70 @@ const CreateExam = () => {
               </div>
             </div>
 
-            <div>
-              <Label htmlFor="studentFile">Upload Student List (CSV)</Label>
-              <div className="mt-2">
-                <Input
-                  id="studentFile"
-                  type="file"
-                  accept=".csv"
-                  onChange={(e) => setStudentFile(e.target.files?.[0] || null)}
-                  required
-                />
-                <p className="text-xs text-muted-foreground mt-2">
-                  CSV format: Name, Registration Number (one per line with header)
-                </p>
+            {subjects.length > 0 && (
+              <div>
+                <Label>Subjects</Label>
+                <div className="space-y-3 mt-2">
+                  {subjects.map((subject, index) => (
+                    <div key={index} className="grid md:grid-cols-2 gap-4">
+                      <Input
+                        placeholder={`Subject ${index + 1} Name`}
+                        value={subject.name}
+                        onChange={(e) => handleSubjectChange(index, "name", e.target.value)}
+                        required
+                      />
+                      <Input
+                        placeholder={`Subject ${index + 1} Code`}
+                        value={subject.code}
+                        onChange={(e) => handleSubjectChange(index, "code", e.target.value)}
+                      />
+                    </div>
+                  ))}
+                </div>
               </div>
+            )}
+
+            <div className="flex items-center space-x-2">
+              <Switch
+                id="shared-seating"
+                checked={useSharedSeating}
+                onCheckedChange={setUseSharedSeating}
+              />
+              <Label htmlFor="shared-seating" className="cursor-pointer">
+                Use same seating arrangement for all subjects
+              </Label>
             </div>
+
+            {departments.length > 0 && (
+              <div>
+                <Label>Departments & Student Lists</Label>
+                <div className="space-y-4 mt-2">
+                  {departments.map((dept, index) => (
+                    <Card key={index} className="p-4">
+                      <div className="space-y-3">
+                        <Input
+                          placeholder={`Department ${index + 1} Name (e.g., CSE, AIDS)`}
+                          value={dept.name}
+                          onChange={(e) => handleDepartmentChange(index, "name", e.target.value)}
+                          required
+                        />
+                        <div>
+                          <Input
+                            type="file"
+                            accept=".csv"
+                            onChange={(e) => handleDepartmentFileUpload(index, e.target.files?.[0] || null)}
+                            required
+                          />
+                          <p className="text-xs text-muted-foreground mt-1">
+                            CSV: Name, Registration Number | {dept.students.length} students loaded
+                          </p>
+                        </div>
+                      </div>
+                    </Card>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {formData.numberOfHalls > 0 && (
               <div>

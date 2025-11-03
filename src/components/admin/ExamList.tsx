@@ -17,9 +17,17 @@ const ExamList = () => {
 
   const fetchExams = async () => {
     try {
+      setLoading(true);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        toast.error("Not authenticated");
+        return;
+      }
+
       const { data, error } = await supabase
         .from("exams")
         .select("*")
+        .eq("created_by", user.id)
         .order("created_at", { ascending: false });
 
       if (error) throw error;
@@ -32,13 +40,15 @@ const ExamList = () => {
   };
 
   const handleDelete = async (examId: string) => {
-    if (!confirm("Are you sure you want to delete this exam?")) return;
+    if (!confirm("⚠️ Delete Exam?\n\nThis will permanently remove:\n• Exam details\n• All subjects\n• All seat allocations\n• All hall configurations\n\nThis action cannot be undone.")) {
+      return;
+    }
 
     try {
       const { error } = await supabase.from("exams").delete().eq("id", examId);
 
       if (error) throw error;
-      toast.success("Exam deleted successfully");
+      toast.success("Exam and all related data deleted successfully");
       fetchExams();
     } catch (error: any) {
       toast.error("Failed to delete exam");
