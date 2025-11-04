@@ -94,6 +94,7 @@ const CreateExam = () => {
             return;
           }
 
+          // Split into lines and filter empty ones
           const lines = text.split(/\r?\n/).filter((line) => line.trim());
           
           if (lines.length < 2) {
@@ -101,32 +102,96 @@ const CreateExam = () => {
             return;
           }
 
+          // Helper function to parse CSV line handling quotes
+          const parseCSVLine = (line: string): string[] => {
+            const result = [];
+            let current = '';
+            let inQuotes = false;
+            
+            for (let i = 0; i < line.length; i++) {
+              const char = line[i];
+              
+              if (char === '"') {
+                inQuotes = !inQuotes;
+              } else if (char === ',' && !inQuotes) {
+                result.push(current.trim());
+                current = '';
+              } else {
+                current += char;
+              }
+            }
+            result.push(current.trim());
+            return result.map(field => field.replace(/^["']|["']$/g, '').trim());
+          };
+
           const students = [];
+          const header = parseCSVLine(lines[0].toLowerCase());
+          
+          // Find column indices for name and registration number
+          let nameIndex = -1;
+          let regIndex = -1;
+          
+          for (let i = 0; i < header.length; i++) {
+            const col = header[i];
+            if (col.includes('name') && !col.includes('department')) {
+              nameIndex = i;
+            }
+            if (col.includes('reg') || col.includes('roll') || col.includes('number')) {
+              regIndex = i;
+            }
+          }
+
+          // If no header match, assume first column is name, second is reg number
+          if (nameIndex === -1) nameIndex = 0;
+          if (regIndex === -1) regIndex = 1;
+
+          console.log(`Parsing ${deptName}: Name column=${nameIndex}, Reg column=${regIndex}`);
+
           for (let i = 1; i < lines.length; i++) {
             const line = lines[i].trim();
             if (!line) continue;
 
-            const parts = line.split(",").map((s) => s.trim());
+            const parts = parseCSVLine(line);
             
-            if (parts.length >= 2 && parts[0] && parts[1]) {
+            if (parts.length > Math.max(nameIndex, regIndex)) {
+              const name = parts[nameIndex]?.trim();
+              let regNumber = parts[regIndex]?.trim();
+
+              // Skip if name or reg number is empty or looks like a header
+              if (!name || !regNumber || 
+                  name.toLowerCase().includes('name') || 
+                  regNumber.toLowerCase().includes('number') ||
+                  name.toLowerCase().includes('b.e-') ||
+                  name.toLowerCase().includes('b.tech')) {
+                continue;
+              }
+
+              // Handle scientific notation (e.g., "7.30422E+11" -> "730422000000")
+              if (regNumber.includes('E+') || regNumber.includes('e+')) {
+                const num = parseFloat(regNumber);
+                if (!isNaN(num)) {
+                  regNumber = num.toFixed(0);
+                }
+              }
+
               students.push({
-                name: parts[0],
-                registration_number: parts[1],
+                name: name,
+                registration_number: regNumber,
                 department: deptName
               });
             }
           }
 
           if (students.length === 0) {
-            reject(new Error("No valid student data found in CSV"));
+            reject(new Error(`No valid student data found. Expected format: Name, Registration Number. Found columns: ${header.join(', ')}`));
             return;
           }
 
-          console.log(`Successfully parsed ${students.length} students from ${deptName}:`, students);
+          console.log(`✓ Parsed ${students.length} students from ${deptName}:`, students.slice(0, 3));
           resolve(students);
         } catch (error) {
           console.error("CSV parsing error:", error);
-          reject(error);
+          reject(new Error(`Failed to parse CSV: ${error.message}`));
         }
       };
       reader.onerror = () => reject(new Error("Failed to read file"));
