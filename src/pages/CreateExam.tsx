@@ -89,30 +89,67 @@ const CreateExam = () => {
       reader.onload = (e) => {
         try {
           const text = e.target?.result as string;
-          const lines = text.split("\n").filter((line) => line.trim());
-          const students = lines.slice(1).map((line) => {
-            const [name, regNumber] = line.split(",").map((s) => s.trim());
-            return { name, registration_number: regNumber, department: deptName };
-          });
+          if (!text || text.trim() === "") {
+            reject(new Error("File is empty"));
+            return;
+          }
+
+          const lines = text.split(/\r?\n/).filter((line) => line.trim());
+          
+          if (lines.length < 2) {
+            reject(new Error("CSV must have header row and at least one student"));
+            return;
+          }
+
+          const students = [];
+          for (let i = 1; i < lines.length; i++) {
+            const line = lines[i].trim();
+            if (!line) continue;
+
+            const parts = line.split(",").map((s) => s.trim());
+            
+            if (parts.length >= 2 && parts[0] && parts[1]) {
+              students.push({
+                name: parts[0],
+                registration_number: parts[1],
+                department: deptName
+              });
+            }
+          }
+
+          if (students.length === 0) {
+            reject(new Error("No valid student data found in CSV"));
+            return;
+          }
+
+          console.log(`Successfully parsed ${students.length} students from ${deptName}:`, students);
           resolve(students);
         } catch (error) {
+          console.error("CSV parsing error:", error);
           reject(error);
         }
       };
-      reader.onerror = reject;
+      reader.onerror = () => reject(new Error("Failed to read file"));
       reader.readAsText(file);
     });
   };
 
   const handleDepartmentFileUpload = async (index: number, file: File | null) => {
     if (!file) return;
+    
+    if (!departments[index].name) {
+      toast.error("Please enter department name first");
+      return;
+    }
+
     try {
       const students = await parseStudentFile(file, departments[index].name);
       handleDepartmentChange(index, "students", students);
       handleDepartmentChange(index, "file", file);
-      toast.success(`Loaded ${students.length} students from ${departments[index].name}`);
-    } catch (error) {
-      toast.error("Failed to parse CSV file");
+      toast.success(`✓ Loaded ${students.length} students from ${departments[index].name}`);
+    } catch (error: any) {
+      console.error("File upload error:", error);
+      toast.error(error.message || "Failed to parse CSV file. Ensure format is: Name, Registration Number");
     }
   };
 
@@ -183,12 +220,18 @@ const CreateExam = () => {
         numberOfDepartments: Number(formData.numberOfDepartments),
       });
 
-      // Validate departments have files
-      if (departments.some(d => !d.name || !d.file)) {
-        toast.error("Please provide names and CSV files for all departments");
+      // Validate departments have files and students
+      const emptyDepts = departments.filter(d => !d.name || !d.file || !d.students || d.students.length === 0);
+      if (emptyDepts.length > 0) {
+        toast.error("Please provide names and valid CSV files for all departments");
         setLoading(false);
         return;
       }
+
+      console.log("All departments validated:", departments.map(d => ({
+        name: d.name,
+        studentCount: d.students.length
+      })));
 
       // Validate subjects
       if (subjects.some(s => !s.name)) {
@@ -202,9 +245,23 @@ const CreateExam = () => {
       } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated");
 
-      // Gather all students
+      // Gather all students from all departments
       const allStudents = departments.flatMap(d => d.students);
       const totalSeats = validatedData.benchRows * validatedData.benchColumns * validatedData.numberOfHalls;
+
+      console.log(`Total students: ${allStudents.length}, Total seats: ${totalSeats}`);
+
+      if (allStudents.length > totalSeats) {
+        toast.error(`Not enough seats! You have ${allStudents.length} students but only ${totalSeats} seats available.`);
+        setLoading(false);
+        return;
+      }
+
+      if (allStudents.length === 0) {
+        toast.error("No students found in uploaded CSV files");
+        setLoading(false);
+        return;
+      }
 
       // Create exam
       const { data: exam, error: examError } = await supabase
@@ -282,38 +339,51 @@ const CreateExam = () => {
 
       if (hallsError) throw hallsError;
 
-      // Allocate seats
+      // Allocate seats - use a working copy to avoid mutating original
       const allAllocations = [];
+      const studentsToAllocate = [...allStudents];
+      
+      console.log(`Starting seat allocation for ${studentsToAllocate.length} students across ${halls.length} halls`);
       
       if (useSharedSeating) {
         // Same seating for all subjects
         for (const hall of halls) {
+          const seatsInHall = validatedData.benchRows * validatedData.benchColumns;
+          const studentsForHall = studentsToAllocate.splice(0, Math.min(seatsInHall, studentsToAllocate.length));
+          
           const hallAllocations = allocateSeatsRoundRobin(
-            allStudents.slice(0, validatedData.benchRows * validatedData.benchColumns),
+            studentsForHall,
             validatedData.benchRows,
             validatedData.benchColumns,
             hall.id
           );
+          
           allAllocations.push(...hallAllocations.map(a => ({ ...a, exam_id: exam.id })));
-          allStudents.splice(0, hallAllocations.length);
+          console.log(`Hall ${hall.hall_name}: allocated ${hallAllocations.length} students`);
         }
       } else {
         // Different seating per subject
         for (const subject of subjectsData) {
           const subjectStudents = [...allStudents];
           for (const hall of halls) {
+            const seatsInHall = validatedData.benchRows * validatedData.benchColumns;
+            const studentsForHall = subjectStudents.splice(0, Math.min(seatsInHall, subjectStudents.length));
+            
             const hallAllocations = allocateSeatsRoundRobin(
-              subjectStudents.slice(0, validatedData.benchRows * validatedData.benchColumns),
+              studentsForHall,
               validatedData.benchRows,
               validatedData.benchColumns,
               hall.id,
               subject.id
             );
+            
             allAllocations.push(...hallAllocations.map(a => ({ ...a, exam_id: exam.id })));
-            subjectStudents.splice(0, hallAllocations.length);
+            console.log(`Hall ${hall.hall_name}, Subject ${subject.subject_name}: allocated ${hallAllocations.length} students`);
           }
         }
       }
+
+      console.log(`Total seat allocations created: ${allAllocations.length}`);
 
       const { error: allocationsError } = await supabase
         .from("seat_allocations")
@@ -502,14 +572,17 @@ const CreateExam = () => {
                           required
                         />
                         <div>
-                          <Input
+                         <Input
                             type="file"
                             accept=".csv"
                             onChange={(e) => handleDepartmentFileUpload(index, e.target.files?.[0] || null)}
                             required
+                            className={dept.students.length > 0 ? "border-green-500" : ""}
                           />
-                          <p className="text-xs text-muted-foreground mt-1">
-                            CSV: Name, Registration Number | {dept.students.length} students loaded
+                          <p className={`text-xs mt-1 ${dept.students.length > 0 ? "text-green-600 font-medium" : "text-muted-foreground"}`}>
+                            CSV Format: Name, Registration Number
+                            {dept.students.length > 0 && ` | ✓ ${dept.students.length} students loaded`}
+                            {dept.file && !dept.students.length && " | Processing..."}
                           </p>
                         </div>
                       </div>
