@@ -37,6 +37,7 @@ const CreateExam = () => {
   const [hallNames, setHallNames] = useState<string[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([{ name: "", code: "" }]);
   const [departments, setDepartments] = useState<Department[]>([{ name: "", file: null, students: [] }]);
+  const [parsingStatus, setParsingStatus] = useState<boolean[]>([]);
   const [useSharedSeating, setUseSharedSeating] = useState(true);
   const [formData, setFormData] = useState({
     examName: "",
@@ -75,6 +76,7 @@ const CreateExam = () => {
     setFormData({ ...formData, numberOfDepartments: value });
     const newDepts = Array(value).fill(null).map((_, i) => departments[i] || { name: "", file: null, students: [] });
     setDepartments(newDepts);
+    setParsingStatus(Array(value).fill(false));
   };
 
   const handleDepartmentChange = (index: number, field: keyof Department, value: any) => {
@@ -88,34 +90,74 @@ const CreateExam = () => {
       const reader = new FileReader();
       reader.onload = (e) => {
         try {
-          const text = e.target?.result as string;
+          let text = e.target?.result as string;
           if (!text || text.trim() === "") {
             reject(new Error("File is empty"));
             return;
           }
 
-          // Split into lines and filter empty ones
-          const lines = text.split(/\r?\n/).filter((line) => line.trim());
-          
-          if (lines.length < 2) {
-            reject(new Error("CSV must have header row and at least one student"));
+          // Remove BOM if present
+          if (text.charCodeAt(0) === 0xFEFF) {
+            text = text.slice(1);
+          }
+
+          // Normalize line endings and split
+          const rawLines = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
+          const nonEmpty = rawLines.filter((line) => line && line.trim().length > 0);
+
+          if (nonEmpty.length < 1) {
+            reject(new Error("CSV must contain data"));
             return;
           }
 
-          // Helper function to parse CSV line handling quotes
+          // Detect delimiter from sample
+          const detectDelimiter = (lines: string[]) => {
+            const candidates = [",", ";", "\t", "|"];
+            let best = ",";
+            let bestScore = -1;
+            for (const delim of candidates) {
+              const sample = lines.slice(0, Math.min(10, lines.length));
+              const score = sample
+                .map((l) => {
+                  let inQ = false;
+                  let count = 0;
+                  for (let i = 0; i < l.length; i++) {
+                    const ch = l[i];
+                    if (ch === '"') inQ = !inQ;
+                    else if (ch === delim && !inQ) count++;
+                  }
+                  return count + 1;
+                })
+                .reduce((a, b) => a + b, 0);
+              if (score > bestScore) {
+                bestScore = score;
+                best = delim;
+              }
+            }
+            return best;
+          };
+
+          const delimiter = detectDelimiter(nonEmpty);
+          console.info(`Detected delimiter "${delimiter}" for ${deptName}`);
+
+          // CSV line parser using chosen delimiter, respecting quotes
           const parseCSVLine = (line: string): string[] => {
-            const result = [];
-            let current = '';
+            const result: string[] = [];
+            let current = "";
             let inQuotes = false;
-            
+
             for (let i = 0; i < line.length; i++) {
               const char = line[i];
-              
               if (char === '"') {
-                inQuotes = !inQuotes;
-              } else if (char === ',' && !inQuotes) {
+                if (inQuotes && line[i + 1] === '"') {
+                  current += '"';
+                  i++;
+                } else {
+                  inQuotes = !inQuotes;
+                }
+              } else if (char === delimiter && !inQuotes) {
                 result.push(current.trim());
-                current = '';
+                current = "";
               } else {
                 current += char;
               }
@@ -124,72 +166,94 @@ const CreateExam = () => {
             return result.map(field => field.replace(/^["']|["']$/g, '').trim());
           };
 
-          const students = [];
-          const header = parseCSVLine(lines[0].toLowerCase());
-          
-          // Find column indices for name and registration number
+          // Determine header row (first row with both name and reg-like label)
+          const headerRowIndex = Math.max(
+            0,
+            nonEmpty.findIndex((l) => {
+              const lower = l.toLowerCase();
+              return lower.includes("name") && (lower.includes("reg") || lower.includes("register") || lower.includes("roll") || lower.includes("admission") || lower.includes("number") || lower.includes("no."));
+            })
+          );
+
+          const header = parseCSVLine(nonEmpty[headerRowIndex].toLowerCase());
           let nameIndex = -1;
           let regIndex = -1;
-          
+
           for (let i = 0; i < header.length; i++) {
             const col = header[i];
-            if (col.includes('name') && !col.includes('department')) {
+            if (nameIndex === -1 && col.includes('name') && !col.includes('department')) {
               nameIndex = i;
             }
-            if (col.includes('reg') || col.includes('roll') || col.includes('number')) {
+            if (regIndex === -1 && (col.includes('reg') || col.includes('roll') || col.includes('register') || col.includes('admission') || col === 'id' || col.includes('number') || col.includes('no'))) {
               regIndex = i;
             }
           }
 
-          // If no header match, assume first column is name, second is reg number
-          if (nameIndex === -1) nameIndex = 0;
-          if (regIndex === -1) regIndex = 1;
-
-          console.log(`Parsing ${deptName}: Name column=${nameIndex}, Reg column=${regIndex}`);
-
-          for (let i = 1; i < lines.length; i++) {
-            const line = lines[i].trim();
-            if (!line) continue;
-
-            const parts = parseCSVLine(line);
-            
-            if (parts.length > Math.max(nameIndex, regIndex)) {
-              const name = parts[nameIndex]?.trim();
-              let regNumber = parts[regIndex]?.trim();
-
-              // Skip if name or reg number is empty or looks like a header
-              if (!name || !regNumber || 
-                  name.toLowerCase().includes('name') || 
-                  regNumber.toLowerCase().includes('number') ||
-                  name.toLowerCase().includes('b.e-') ||
-                  name.toLowerCase().includes('b.tech')) {
-                continue;
-              }
-
-              // Handle scientific notation (e.g., "7.30422E+11" -> "730422000000")
-              if (regNumber.includes('E+') || regNumber.includes('e+')) {
-                const num = parseFloat(regNumber);
-                if (!isNaN(num)) {
-                  regNumber = num.toFixed(0);
-                }
-              }
-
-              students.push({
-                name: name,
-                registration_number: regNumber,
-                department: deptName
-              });
+          // Heuristic fallback if header is not helpful
+          if (nameIndex === -1 || regIndex === -1) {
+            const sample = nonEmpty.slice(headerRowIndex + 1, headerRowIndex + 6).map(parseCSVLine);
+            const widestRow = sample.reduce((a, b) => (b.length > a.length ? b : a), [] as string[]);
+            if (widestRow.length >= 2) {
+              if (nameIndex === -1) nameIndex = 0;
+              if (regIndex === -1) regIndex = 1;
+            } else {
+              nameIndex = 0;
+              regIndex = 1;
             }
           }
 
+          console.log(`Parsing ${deptName}: header at row ${headerRowIndex}, name col=${nameIndex}, reg col=${regIndex}`);
+
+          const students: any[] = [];
+          for (let li = headerRowIndex + 1; li < nonEmpty.length; li++) {
+            const line = nonEmpty[li].trim();
+            if (!line) continue;
+
+            const parts = parseCSVLine(line);
+            if (parts.length <= Math.max(nameIndex, regIndex)) continue;
+
+            const name = parts[nameIndex]?.trim();
+            let regNumber = parts[regIndex]?.trim();
+
+            const lowerName = (name || '').toLowerCase();
+            const lowerReg = (regNumber || '').toLowerCase();
+            if (
+              !name ||
+              !regNumber ||
+              lowerName.includes('name') ||
+              lowerReg.includes('number') ||
+              lowerName.includes('b.e-') ||
+              lowerName.includes('b.tech') ||
+              lowerName.startsWith('department') ||
+              lowerName.startsWith('semester')
+            ) {
+              continue;
+            }
+
+            // Handle scientific notation and whitespace in reg no
+            if (/[0-9]+e\+\d+/i.test(regNumber)) {
+              const num = parseFloat(regNumber);
+              if (!isNaN(num)) {
+                regNumber = num.toFixed(0);
+              }
+            }
+            regNumber = regNumber.replace(/\s+/g, '');
+
+            students.push({
+              name,
+              registration_number: regNumber,
+              department: deptName,
+            });
+          }
+
           if (students.length === 0) {
-            reject(new Error(`No valid student data found. Expected format: Name, Registration Number. Found columns: ${header.join(', ')}`));
+            reject(new Error(`No valid student data found. Expected columns like "Name" and "Reg No". Detected delimiter "${delimiter}".`));
             return;
           }
 
           console.log(`✓ Parsed ${students.length} students from ${deptName}:`, students.slice(0, 3));
           resolve(students);
-        } catch (error) {
+        } catch (error: any) {
           console.error("CSV parsing error:", error);
           reject(new Error(`Failed to parse CSV: ${error.message}`));
         }
@@ -207,15 +271,40 @@ const CreateExam = () => {
       return;
     }
 
+    // Mark as parsing and set file immediately
+    setParsingStatus((prev) => {
+      const arr = [...prev];
+      arr[index] = true;
+      return arr;
+    });
+    handleDepartmentChange(index, "file", file);
+
     try {
       const students = await parseStudentFile(file, departments[index].name);
       handleDepartmentChange(index, "students", students);
-      handleDepartmentChange(index, "file", file);
       toast.success(`✓ Loaded ${students.length} students from ${departments[index].name}`);
     } catch (error: any) {
       console.error("File upload error:", error);
+      handleDepartmentChange(index, "students", []);
+      handleDepartmentChange(index, "file", null);
       toast.error(error.message || "Failed to parse CSV file. Ensure format is: Name, Registration Number");
+    } finally {
+      setParsingStatus((prev) => {
+        const arr = [...prev];
+        arr[index] = false;
+        return arr;
+      });
     }
+  };
+
+  const handleClearDepartment = (index: number) => {
+    handleDepartmentChange(index, "students", []);
+    handleDepartmentChange(index, "file", null);
+    setParsingStatus((prev) => {
+      const arr = [...prev];
+      arr[index] = false;
+      return arr;
+    });
   };
 
   const allocateSeatsRoundRobin = (allStudents: any[], rows: number, cols: number, hallId: string, subjectId?: string) => {
@@ -286,9 +375,12 @@ const CreateExam = () => {
       });
 
       // Validate departments have files and students
-      const emptyDepts = departments.filter(d => !d.name || !d.file || !d.students || d.students.length === 0);
+      const emptyDepts = departments
+        .map((d, i) => ({ ...d, index: i }))
+        .filter(d => !d.name || !d.file || !d.students || d.students.length === 0);
       if (emptyDepts.length > 0) {
-        toast.error("Please provide names and valid CSV files for all departments");
+        const list = emptyDepts.map(d => d.name || `Department ${d.index + 1}`).join(", ");
+        toast.error(`Please check CSVs for: ${list}`);
         setLoading(false);
         return;
       }
@@ -636,19 +728,33 @@ const CreateExam = () => {
                           onChange={(e) => handleDepartmentChange(index, "name", e.target.value)}
                           required
                         />
-                        <div>
-                         <Input
-                            type="file"
-                            accept=".csv"
-                            onChange={(e) => handleDepartmentFileUpload(index, e.target.files?.[0] || null)}
-                            required
-                            className={dept.students.length > 0 ? "border-green-500" : ""}
-                          />
-                          <p className={`text-xs mt-1 ${dept.students.length > 0 ? "text-green-600 font-medium" : "text-muted-foreground"}`}>
-                            CSV Format: Name, Registration Number
-                            {dept.students.length > 0 && ` | ✓ ${dept.students.length} students loaded`}
-                            {dept.file && !dept.students.length && " | Processing..."}
-                          </p>
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex-1">
+                           <Input
+                              type="file"
+                              accept=".csv"
+                              onChange={(e) => handleDepartmentFileUpload(index, e.target.files?.[0] || null)}
+                              required
+                              className={dept.students.length > 0 ? "border-green-500" : ""}
+                            />
+                            <p className={`text-xs mt-1 ${dept.students.length > 0 ? "text-green-600 font-medium" : "text-muted-foreground"}`}>
+                              {dept.file ? (
+                                <>
+                                  {dept.file.name} • CSV Format: Name, Registration Number
+                                  {parsingStatus[index] && " | Parsing..."}
+                                  {!parsingStatus[index] && dept.students.length > 0 && ` | ✓ ${dept.students.length} students loaded`}
+                                  {!parsingStatus[index] && dept.file && dept.students.length === 0 && " | No students detected"}
+                                </>
+                              ) : (
+                                "CSV Format: Name, Registration Number"
+                              )}
+                            </p>
+                          </div>
+                          {dept.file && (
+                            <Button type="button" variant="ghost" size="icon" onClick={() => handleClearDepartment(index)} aria-label="Remove CSV">
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          )}
                         </div>
                       </div>
                     </Card>
