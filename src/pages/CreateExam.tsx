@@ -184,8 +184,17 @@ const CreateExam = () => {
             if (nameIndex === -1 && col.includes('name') && !col.includes('department')) {
               nameIndex = i;
             }
-            if (regIndex === -1 && (col.includes('reg') || col.includes('roll') || col.includes('register') || col.includes('admission') || col === 'id' || col.includes('number') || col.includes('no'))) {
-              regIndex = i;
+            // Enhanced: Explicitly check for "roll number", "roll no", "reg number", etc.
+            if (regIndex === -1) {
+              const isRollNumber = col.includes('roll') && col.includes('number');
+              const isRegNumber = col.includes('reg') && (col.includes('number') || col.includes('no'));
+              const isRollNo = col === 'roll no' || col === 'rollno';
+              const isRegNo = col === 'reg no' || col === 'regno';
+              const isGeneric = col.includes('register') || col.includes('admission') || col === 'id';
+              
+              if (isRollNumber || isRegNumber || isRollNo || isRegNo || isGeneric) {
+                regIndex = i;
+              }
             }
           }
 
