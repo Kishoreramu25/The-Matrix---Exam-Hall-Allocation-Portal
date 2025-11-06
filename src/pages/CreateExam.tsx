@@ -179,12 +179,11 @@ const CreateExam = () => {
           let nameIndex = -1;
           let regIndex = -1;
 
+          // CRITICAL: Check for registration column FIRST to avoid misidentification
           for (let i = 0; i < header.length; i++) {
             const col = header[i];
-            if (nameIndex === -1 && col.includes('name') && !col.includes('department')) {
-              nameIndex = i;
-            }
-            // Enhanced: Explicitly check for "roll number", "roll no", "reg number", etc.
+            
+            // Priority 1: Identify registration/roll number column first
             if (regIndex === -1) {
               const isRollNumber = col.includes('roll') && col.includes('number');
               const isRegNumber = col.includes('reg') && (col.includes('number') || col.includes('no'));
@@ -195,6 +194,14 @@ const CreateExam = () => {
               if (isRollNumber || isRegNumber || isRollNo || isRegNo || isGeneric) {
                 regIndex = i;
               }
+            }
+          }
+          
+          // Priority 2: Identify name column (but not the reg column)
+          for (let i = 0; i < header.length; i++) {
+            const col = header[i];
+            if (nameIndex === -1 && i !== regIndex && col.includes('name') && !col.includes('department')) {
+              nameIndex = i;
             }
           }
 
@@ -383,13 +390,19 @@ const CreateExam = () => {
         numberOfDepartments: Number(formData.numberOfDepartments),
       });
 
-      // Validate departments have files and students
+      // Validate departments have files and students with detailed error message
       const emptyDepts = departments
         .map((d, i) => ({ ...d, index: i }))
         .filter(d => !d.name || !d.file || !d.students || d.students.length === 0);
       if (emptyDepts.length > 0) {
-        const list = emptyDepts.map(d => d.name || `Department ${d.index + 1}`).join(", ");
-        toast.error(`Please check CSVs for: ${list}`);
+        const errorDetails = emptyDepts.map(d => {
+          const deptName = d.name || `Department ${d.index + 1}`;
+          if (!d.name) return `${deptName}: Missing department name`;
+          if (!d.file) return `${deptName}: No CSV file uploaded`;
+          if (!d.students || d.students.length === 0) return `${deptName}: CSV parsed but found 0 students`;
+          return deptName;
+        }).join(" | ");
+        toast.error(`ERROR: ${errorDetails}`, { duration: 8000 });
         setLoading(false);
         return;
       }
