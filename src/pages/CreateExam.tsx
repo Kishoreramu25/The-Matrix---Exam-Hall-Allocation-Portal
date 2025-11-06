@@ -25,10 +25,19 @@ interface Subject {
   code: string;
 }
 
+type ParseReport = {
+  totalRows: number;
+  validRows: number;
+  missingName: number;
+  missingReg: number;
+  duplicatesWithinFile: number;
+};
+
 interface Department {
   name: string;
   file: File | null;
   students: any[];
+  parseReport?: ParseReport;
 }
 
 const CreateExam = () => {
@@ -85,7 +94,7 @@ const CreateExam = () => {
     setDepartments(newDepts);
   };
 
-  const parseStudentFile = async (file: File, deptName: string): Promise<any[]> => {
+  const parseStudentFile = async (file: File, deptName: string): Promise<{ students: any[]; report: ParseReport }> => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = (e) => {
@@ -221,21 +230,36 @@ const CreateExam = () => {
           console.log(`Parsing ${deptName}: header at row ${headerRowIndex}, name col=${nameIndex}, reg col=${regIndex}`);
 
           const students: any[] = [];
+          let totalRows = 0;
+          let missingName = 0;
+          let missingReg = 0;
+          let duplicatesWithinFile = 0;
+          const seenRegs = new Set<string>();
+
           for (let li = headerRowIndex + 1; li < nonEmpty.length; li++) {
             const line = nonEmpty[li].trim();
             if (!line) continue;
 
             const parts = parseCSVLine(line);
             if (parts.length <= Math.max(nameIndex, regIndex)) continue;
+            totalRows++;
 
             const name = parts[nameIndex]?.trim();
             let regNumber = parts[regIndex]?.trim();
 
             const lowerName = (name || '').toLowerCase();
             const lowerReg = (regNumber || '').toLowerCase();
+
+            if (!name) {
+              missingName++;
+              continue;
+            }
+            if (!regNumber) {
+              missingReg++;
+              continue;
+            }
+
             if (
-              !name ||
-              !regNumber ||
               lowerName.includes('name') ||
               lowerReg.includes('number') ||
               lowerName.includes('b.e-') ||
@@ -255,6 +279,12 @@ const CreateExam = () => {
             }
             regNumber = regNumber.replace(/\s+/g, '');
 
+            if (seenRegs.has(regNumber)) {
+              duplicatesWithinFile++;
+              continue;
+            }
+            seenRegs.add(regNumber);
+
             students.push({
               name,
               registration_number: regNumber,
@@ -263,12 +293,20 @@ const CreateExam = () => {
           }
 
           if (students.length === 0) {
-            reject(new Error(`No valid student data found. Expected columns like "Name" and "Reg No". Detected delimiter "${delimiter}".`));
+            reject(new Error(`No valid student rows. Missing Name: ${missingName}, Missing Reg: ${missingReg}, Duplicates: ${duplicatesWithinFile}. Detected delimiter "${delimiter}".`));
             return;
           }
 
-          console.log(`✓ Parsed ${students.length} students from ${deptName}:`, students.slice(0, 3));
-          resolve(students);
+          const report = {
+            totalRows,
+            validRows: students.length,
+            missingName,
+            missingReg,
+            duplicatesWithinFile,
+          };
+
+          console.log(`✓ Parsed ${students.length} students from ${deptName} (rows: ${totalRows}, missName: ${missingName}, missReg: ${missingReg}, dup: ${duplicatesWithinFile})`, students.slice(0, 3));
+          resolve({ students, report });
         } catch (error: any) {
           console.error("CSV parsing error:", error);
           reject(new Error(`Failed to parse CSV: ${error.message}`));
@@ -296,9 +334,10 @@ const CreateExam = () => {
     handleDepartmentChange(index, "file", file);
 
     try {
-      const students = await parseStudentFile(file, departments[index].name);
+      const { students, report } = await parseStudentFile(file, departments[index].name);
       handleDepartmentChange(index, "students", students);
-      toast.success(`✓ Loaded ${students.length} students from ${departments[index].name}`);
+      handleDepartmentChange(index, "parseReport", report);
+      toast.success(`✓ ${students.length}/${report.totalRows} valid • Missing Name: ${report.missingName}, Reg: ${report.missingReg}, Duplicates: ${report.duplicatesWithinFile} (${departments[index].name})`);
     } catch (error: any) {
       console.error("File upload error:", error);
       handleDepartmentChange(index, "students", []);
@@ -390,21 +429,41 @@ const CreateExam = () => {
         numberOfDepartments: Number(formData.numberOfDepartments),
       });
 
-      // Validate departments have files and students with detailed error message
-      const emptyDepts = departments
-        .map((d, i) => ({ ...d, index: i }))
-        .filter(d => !d.name || !d.file || !d.students || d.students.length === 0);
-      if (emptyDepts.length > 0) {
-        const errorDetails = emptyDepts.map(d => {
-          const deptName = d.name || `Department ${d.index + 1}`;
+      // Detailed per-department validation with counts
+      const deptErrors = departments
+        .map((d, i) => {
+          const deptName = d.name || `Department ${i + 1}`;
           if (!d.name) return `${deptName}: Missing department name`;
           if (!d.file) return `${deptName}: No CSV file uploaded`;
-          if (!d.students || d.students.length === 0) return `${deptName}: CSV parsed but found 0 students`;
-          return deptName;
-        }).join(" | ");
-        toast.error(`ERROR: ${errorDetails}`, { duration: 8000 });
+          if (!d.students || d.students.length === 0) {
+            const rep = d.parseReport;
+            if (rep) {
+              return `${deptName}: 0 valid students • Missing Name=${rep.missingName}, Reg=${rep.missingReg}, Duplicates=${rep.duplicatesWithinFile}`;
+            }
+            return `${deptName}: CSV parsed but found 0 students`;
+          }
+          if (
+            d.parseReport &&
+            (d.parseReport.missingName > 0 ||
+              d.parseReport.missingReg > 0 ||
+              d.parseReport.duplicatesWithinFile > 0)
+          ) {
+            return `${deptName}: Loaded ${d.parseReport.validRows}/${d.parseReport.totalRows} • Missing Name=${d.parseReport.missingName}, Reg=${d.parseReport.missingReg}, Duplicates=${d.parseReport.duplicatesWithinFile}`;
+          }
+          return "";
+        })
+        .filter(Boolean) as string[];
+
+      const blockingDeptIssue = departments.some(
+        (d) => !d.name || !d.file || !d.students || d.students.length === 0
+      );
+
+      if (deptErrors.length > 0 && blockingDeptIssue) {
+        toast.error(deptErrors.join(" | "), { duration: 10000 });
         setLoading(false);
         return;
+      } else if (deptErrors.length > 0) {
+        toast.message(deptErrors.join(" | "), { duration: 8000 });
       }
 
       console.log("All departments validated:", departments.map(d => ({
