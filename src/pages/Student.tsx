@@ -180,16 +180,16 @@ const Student = () => {
                 <div>
                   <Label htmlFor="subject">Subject (Optional)</Label>
                   <Select
-                    value={searchData.subjectId}
+                    value={searchData.subjectId || "all"}
                     onValueChange={(value) =>
-                      setSearchData({ ...searchData, subjectId: value })
+                      setSearchData({ ...searchData, subjectId: value === "all" ? "" : value })
                     }
                   >
                     <SelectTrigger id="subject">
                       <SelectValue placeholder="All subjects" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">All subjects</SelectItem>
+                      <SelectItem value="all">All subjects</SelectItem>
                       {subjects.map((subject) => (
                         <SelectItem key={subject.id} value={subject.id}>
                           {subject.subject_name} {subject.subject_code && `(${subject.subject_code})`}
