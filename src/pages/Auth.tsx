@@ -9,10 +9,16 @@ import { toast } from "sonner";
 import { ArrowLeft } from "lucide-react";
 import { z } from "zod";
 
-const authSchema = z.object({
+const signupSchema = z.object({
+  username: z.string().min(3, "Username must be at least 3 characters").max(20, "Username must be at most 20 characters"),
   email: z.string().email("Invalid email address"),
   password: z.string().min(6, "Password must be at least 6 characters"),
-  fullName: z.string().min(2, "Name must be at least 2 characters").optional(),
+  fullName: z.string().min(2, "Name must be at least 2 characters"),
+});
+
+const loginSchema = z.object({
+  username: z.string().min(3, "Username must be at least 3 characters"),
+  password: z.string().min(6, "Password must be at least 6 characters"),
 });
 
 const Auth = () => {
@@ -20,6 +26,7 @@ const Auth = () => {
   const [isLogin, setIsLogin] = useState(true);
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
+    username: "",
     email: "",
     password: "",
     fullName: "",
@@ -30,11 +37,24 @@ const Auth = () => {
     setLoading(true);
 
     try {
-      const validatedData = authSchema.parse(formData);
-
       if (isLogin) {
+        // Validate login data
+        const validatedData = loginSchema.parse(formData);
+
+        // Look up email by username
+        const { data: profile, error: lookupError } = await supabase
+          .from("profiles")
+          .select("email")
+          .eq("username", validatedData.username)
+          .single();
+
+        if (lookupError || !profile) {
+          throw new Error("Invalid username or password");
+        }
+
+        // Sign in with email
         const { error } = await supabase.auth.signInWithPassword({
-          email: validatedData.email,
+          email: profile.email,
           password: validatedData.password,
         });
 
@@ -42,12 +62,28 @@ const Auth = () => {
         toast.success("Logged in successfully");
         navigate("/admin");
       } else {
+        // Validate signup data
+        const validatedData = signupSchema.parse(formData);
+
+        // Check if username already exists
+        const { data: existingUser } = await supabase
+          .from("profiles")
+          .select("username")
+          .eq("username", validatedData.username)
+          .single();
+
+        if (existingUser) {
+          throw new Error("Username already taken");
+        }
+
+        // Sign up with email
         const { error } = await supabase.auth.signUp({
           email: validatedData.email,
           password: validatedData.password,
           options: {
             emailRedirectTo: `${window.location.origin}/admin`,
             data: {
+              username: validatedData.username,
               full_name: validatedData.fullName,
               role: "admin",
             },
@@ -91,35 +127,51 @@ const Auth = () => {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          {!isLogin && (
-            <div>
-              <Label htmlFor="fullName">Full Name</Label>
-              <Input
-                id="fullName"
-                type="text"
-                placeholder="John Doe"
-                value={formData.fullName}
-                onChange={(e) =>
-                  setFormData({ ...formData, fullName: e.target.value })
-                }
-                required={!isLogin}
-              />
-            </div>
-          )}
-
           <div>
-            <Label htmlFor="email">Email</Label>
+            <Label htmlFor="username">Username</Label>
             <Input
-              id="email"
-              type="email"
-              placeholder="admin@college.edu"
-              value={formData.email}
+              id="username"
+              type="text"
+              placeholder="johndoe"
+              value={formData.username}
               onChange={(e) =>
-                setFormData({ ...formData, email: e.target.value })
+                setFormData({ ...formData, username: e.target.value })
               }
               required
             />
           </div>
+
+          {!isLogin && (
+            <>
+              <div>
+                <Label htmlFor="fullName">Full Name</Label>
+                <Input
+                  id="fullName"
+                  type="text"
+                  placeholder="John Doe"
+                  value={formData.fullName}
+                  onChange={(e) =>
+                    setFormData({ ...formData, fullName: e.target.value })
+                  }
+                  required
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="email">Email</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  placeholder="admin@college.edu"
+                  value={formData.email}
+                  onChange={(e) =>
+                    setFormData({ ...formData, email: e.target.value })
+                  }
+                  required
+                />
+              </div>
+            </>
+          )}
 
           <div>
             <Label htmlFor="password">Password</Label>
