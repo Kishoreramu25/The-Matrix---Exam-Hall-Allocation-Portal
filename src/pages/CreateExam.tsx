@@ -325,23 +325,37 @@ const CreateExam = () => {
       return;
     }
 
-    // Mark as parsing and set file immediately
+    // Mark as parsing
     setParsingStatus((prev) => {
       const arr = [...prev];
       arr[index] = true;
       return arr;
     });
-    handleDepartmentChange(index, "file", file);
 
     try {
       const { students, report } = await parseStudentFile(file, departments[index].name);
-      handleDepartmentChange(index, "students", students);
-      handleDepartmentChange(index, "parseReport", report);
+      
+      // Update all fields atomically in one state update
+      const newDepts = [...departments];
+      newDepts[index] = {
+        ...newDepts[index],
+        file: file,
+        students: students,
+        parseReport: report
+      };
+      setDepartments(newDepts);
+      
       toast.success(`✓ ${students.length}/${report.totalRows} valid • Missing Name: ${report.missingName}, Reg: ${report.missingReg}, Duplicates: ${report.duplicatesWithinFile} (${departments[index].name})`);
     } catch (error: any) {
       console.error("File upload error:", error);
-      handleDepartmentChange(index, "students", []);
-      handleDepartmentChange(index, "file", null);
+      const newDepts = [...departments];
+      newDepts[index] = {
+        ...newDepts[index],
+        file: null,
+        students: [],
+        parseReport: undefined
+      };
+      setDepartments(newDepts);
       toast.error(error.message || "Failed to parse CSV file. Ensure format is: Name, Registration Number");
     } finally {
       setParsingStatus((prev) => {
@@ -434,13 +448,15 @@ const CreateExam = () => {
         .map((d, i) => {
           const deptName = d.name || `Department ${i + 1}`;
           if (!d.name) return `${deptName}: Missing department name`;
-          if (!d.file) return `${deptName}: No CSV file uploaded`;
           if (!d.students || d.students.length === 0) {
             const rep = d.parseReport;
-            if (rep) {
-              return `${deptName}: 0 valid students • Missing Name=${rep.missingName}, Reg=${rep.missingReg}, Duplicates=${rep.duplicatesWithinFile}`;
+            if (!d.file && !rep) {
+              return `${deptName}: No CSV file uploaded`;
             }
-            return `${deptName}: CSV parsed but found 0 students`;
+            if (rep) {
+              return `${deptName}: 0 valid students (Total rows: ${rep.totalRows}, Missing Name: ${rep.missingName}, Missing Reg: ${rep.missingReg}, Duplicates: ${rep.duplicatesWithinFile})`;
+            }
+            return `${deptName}: CSV parsing failed`;
           }
           if (
             d.parseReport &&
@@ -448,14 +464,14 @@ const CreateExam = () => {
               d.parseReport.missingReg > 0 ||
               d.parseReport.duplicatesWithinFile > 0)
           ) {
-            return `${deptName}: Loaded ${d.parseReport.validRows}/${d.parseReport.totalRows} • Missing Name=${d.parseReport.missingName}, Reg=${d.parseReport.missingReg}, Duplicates=${d.parseReport.duplicatesWithinFile}`;
+            return `${deptName}: Warning - Loaded ${d.parseReport.validRows}/${d.parseReport.totalRows} students (Missing Name: ${d.parseReport.missingName}, Missing Reg: ${d.parseReport.missingReg}, Duplicates: ${d.parseReport.duplicatesWithinFile})`;
           }
           return "";
         })
         .filter(Boolean) as string[];
 
       const blockingDeptIssue = departments.some(
-        (d) => !d.name || !d.file || !d.students || d.students.length === 0
+        (d) => !d.name || !d.students || d.students.length === 0
       );
 
       if (deptErrors.length > 0 && blockingDeptIssue) {
