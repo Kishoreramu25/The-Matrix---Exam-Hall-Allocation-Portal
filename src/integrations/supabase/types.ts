@@ -123,6 +123,7 @@ export type Database = {
           exam_id: string
           hall_name: string
           id: string
+          location_link: string | null
         }
         Insert: {
           capacity: number
@@ -130,6 +131,7 @@ export type Database = {
           exam_id: string
           hall_name: string
           id?: string
+          location_link?: string | null
         }
         Update: {
           capacity?: number
@@ -137,6 +139,7 @@ export type Database = {
           exam_id?: string
           hall_name?: string
           id?: string
+          location_link?: string | null
         }
         Relationships: [
           {

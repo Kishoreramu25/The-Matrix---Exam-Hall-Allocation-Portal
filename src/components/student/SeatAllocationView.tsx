@@ -1,6 +1,6 @@
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { MapPin, User, Hash, Grid, Building } from "lucide-react";
+import { MapPin, User, Hash, Grid, Building, ExternalLink } from "lucide-react";
 import { useState } from "react";
 
 interface SeatAllocationViewProps {
@@ -87,6 +87,28 @@ const SeatAllocationView = ({ allocation, onReset }: SeatAllocationViewProps) =>
                 <p className="font-semibold">{student.department_name}</p>
               </div>
             </div>
+          )}
+        </div>
+
+        {/* Hall Location Section */}
+        <div className="mt-6 p-4 bg-accent/10 rounded-lg border border-accent/20">
+          <h3 className="font-semibold mb-3 flex items-center gap-2">
+            <MapPin className="h-5 w-5 text-primary" />
+            Hall Location
+          </h3>
+          {hall.location_link ? (
+            <Button
+              variant="outline"
+              className="w-full"
+              onClick={() => window.open(hall.location_link, '_blank', 'noopener,noreferrer')}
+            >
+              <ExternalLink className="h-4 w-4 mr-2" />
+              📍 Open Hall Location in Google Maps
+            </Button>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              📍 Location not added by Examination Controller.
+            </p>
           )}
         </div>
       </Card>

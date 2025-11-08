@@ -44,6 +44,7 @@ const CreateExam = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [hallNames, setHallNames] = useState<string[]>([]);
+  const [hallLocationLinks, setHallLocationLinks] = useState<string[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([{ name: "", code: "" }]);
   const [departments, setDepartments] = useState<Department[]>([{ name: "", file: null, students: [] }]);
   const [parsingStatus, setParsingStatus] = useState<boolean[]>([]);
@@ -61,12 +62,19 @@ const CreateExam = () => {
   const handleNumberOfHallsChange = (value: number) => {
     setFormData({ ...formData, numberOfHalls: value });
     setHallNames(Array(value).fill(""));
+    setHallLocationLinks(Array(value).fill(""));
   };
 
   const handleHallNameChange = (index: number, name: string) => {
     const newNames = [...hallNames];
     newNames[index] = name;
     setHallNames(newNames);
+  };
+
+  const handleHallLocationLinkChange = (index: number, link: string) => {
+    const newLinks = [...hallLocationLinks];
+    newLinks[index] = link;
+    setHallLocationLinks(newLinks);
   };
 
   const handleNumberOfSubjectsChange = (value: number) => {
@@ -584,6 +592,7 @@ const CreateExam = () => {
         exam_id: exam.id,
         hall_name: name || `Hall ${index + 1}`,
         capacity: validatedData.benchRows * validatedData.benchColumns,
+        location_link: hallLocationLinks[index] || null,
       }));
 
       const { data: halls, error: hallsError } = await supabase
@@ -862,15 +871,22 @@ const CreateExam = () => {
 
             {formData.numberOfHalls > 0 && (
               <div>
-                <Label>Hall Names</Label>
-                <div className="grid md:grid-cols-2 gap-4 mt-2">
+                <Label>Hall Names & Location Links</Label>
+                <div className="space-y-4 mt-2">
                   {hallNames.map((name, index) => (
-                    <Input
-                      key={index}
-                      placeholder={`Hall ${index + 1}`}
-                      value={name}
-                      onChange={(e) => handleHallNameChange(index, e.target.value)}
-                    />
+                    <div key={index} className="grid md:grid-cols-2 gap-4">
+                      <Input
+                        placeholder={`Hall ${index + 1} Name`}
+                        value={name}
+                        onChange={(e) => handleHallNameChange(index, e.target.value)}
+                      />
+                      <Input
+                        placeholder="Google Maps Link (optional)"
+                        value={hallLocationLinks[index]}
+                        onChange={(e) => handleHallLocationLinkChange(index, e.target.value)}
+                        type="url"
+                      />
+                    </div>
                   ))}
                 </div>
               </div>
