@@ -134,13 +134,12 @@ const SeatAllocationView = ({ allocation, onReset }: SeatAllocationViewProps) =>
                     <button
                       key={colIndex}
                       onClick={() => seat && setSelectedSeat(seat)}
-                      className={`flex-1 min-w-[50px] h-12 flex flex-col items-center justify-center text-xs font-medium rounded border transition-all ${
-                        seat
+                      className={`flex-1 min-w-[50px] h-12 flex flex-col items-center justify-center text-xs font-medium rounded border transition-all ${seat
                           ? isUserSeat
                             ? "bg-primary text-primary-foreground border-primary shadow-lg scale-110 cursor-default"
                             : "bg-card hover:bg-muted border-border cursor-pointer hover:scale-105"
                           : "bg-muted/30 border-dashed border-muted-foreground/20 cursor-default"
-                      }`}
+                        }`}
                       title={seat ? `Click to view details` : "Empty"}
                       disabled={!seat}
                     >

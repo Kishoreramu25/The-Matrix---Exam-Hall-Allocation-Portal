@@ -49,6 +49,7 @@ const CreateExam = () => {
   const [departments, setDepartments] = useState<Department[]>([{ name: "", file: null, students: [] }]);
   const [parsingStatus, setParsingStatus] = useState<boolean[]>([]);
   const [useSharedSeating, setUseSharedSeating] = useState(true);
+  const [shuffleClasses, setShuffleClasses] = useState(true);
   const [formData, setFormData] = useState({
     examName: "",
     examCode: "",
@@ -199,7 +200,7 @@ const CreateExam = () => {
           // CRITICAL: Check for registration column FIRST to avoid misidentification
           for (let i = 0; i < header.length; i++) {
             const col = header[i];
-            
+
             // Priority 1: Identify registration/roll number column first
             if (regIndex === -1) {
               const isRollNumber = col.includes('roll') && col.includes('number');
@@ -207,13 +208,13 @@ const CreateExam = () => {
               const isRollNo = col === 'roll no' || col === 'rollno';
               const isRegNo = col === 'reg no' || col === 'regno';
               const isGeneric = col.includes('register') || col.includes('admission') || col === 'id';
-              
+
               if (isRollNumber || isRegNumber || isRollNo || isRegNo || isGeneric) {
                 regIndex = i;
               }
             }
           }
-          
+
           // Priority 2: Identify name column (but not the reg column)
           for (let i = 0; i < header.length; i++) {
             const col = header[i];
@@ -327,7 +328,7 @@ const CreateExam = () => {
 
   const handleDepartmentFileUpload = async (index: number, file: File | null) => {
     if (!file) return;
-    
+
     if (!departments[index].name) {
       toast.error("Please enter department name first");
       return;
@@ -342,7 +343,7 @@ const CreateExam = () => {
 
     try {
       const { students, report } = await parseStudentFile(file, departments[index].name);
-      
+
       // Update all fields atomically in one state update
       const newDepts = [...departments];
       newDepts[index] = {
@@ -352,7 +353,7 @@ const CreateExam = () => {
         parseReport: report
       };
       setDepartments(newDepts);
-      
+
       toast.success(`✓ ${students.length}/${report.totalRows} valid • Missing Name: ${report.missingName}, Reg: ${report.missingReg}, Duplicates: ${report.duplicatesWithinFile} (${departments[index].name})`);
     } catch (error: any) {
       console.error("File upload error:", error);
@@ -384,56 +385,65 @@ const CreateExam = () => {
     });
   };
 
-  const allocateSeatsRoundRobin = (allStudents: any[], rows: number, cols: number, hallId: string, subjectId?: string) => {
-    const totalSeats = rows * cols;
-    const deptGroups: { [key: string]: any[] } = {};
-    
-    allStudents.forEach(student => {
-      if (!deptGroups[student.department]) {
-        deptGroups[student.department] = [];
-      }
-      deptGroups[student.department].push(student);
-    });
+  const getOrderedStudents = (depts: Department[], shouldShuffle: boolean) => {
+    // If shuffle is off OR odd number of departments, return sequential
+    if (!shouldShuffle || depts.length % 2 !== 0) {
+      return depts.flatMap((d) => [...d.students]);
+    }
 
-    const deptNames = Object.keys(deptGroups);
+    // Helper to interleave a list of departments (generic, but we'll use it for pairs)
+    const interleave = (ds: Department[]) => {
+      const queues = ds.map((d) => [...d.students]);
+      const result = [];
+      let active = true;
+      while (active) {
+        active = false;
+        for (let i = 0; i < queues.length; i++) {
+          if (queues[i].length > 0) {
+            result.push(queues[i].shift());
+            active = true;
+          }
+        }
+      }
+      return result;
+    };
+
+    // Even number of departments: Shuffle in disjoint pairs (1&2, 3&4, etc.)
+    const result = [];
+    for (let i = 0; i < depts.length; i += 2) {
+      const pair = depts.slice(i, i + 2);
+      result.push(...interleave(pair));
+    }
+    return result;
+  };
+
+  const allocateSeats = (
+    students: any[],
+    rows: number,
+    cols: number,
+    hallId: string,
+    subjectId?: string
+  ) => {
     const allocations = [];
-    let currentDeptIndex = 0;
-    let deptPointers = Object.fromEntries(deptNames.map(dept => [dept, 0]));
 
     for (let row = 1; row <= rows; row++) {
       for (let col = 1; col <= cols; col++) {
-        let assigned = false;
-        let attempts = 0;
-        
-        while (!assigned && attempts < deptNames.length) {
-          const currentDept = deptNames[currentDeptIndex];
-          const students = deptGroups[currentDept];
-          const pointer = deptPointers[currentDept];
+        if (students.length === 0) return allocations;
 
-          if (pointer < students.length) {
-            const student = students[pointer];
-            allocations.push({
-              hall_id: hallId,
-              student_name: student.name,
-              registration_number: student.registration_number,
-              department_name: student.department,
-              seat_number: allocations.length + 1,
-              row_number: row,
-              column_number: col,
-              subject_id: subjectId,
-            });
-            deptPointers[currentDept]++;
-            assigned = true;
-          }
+        const student = students.shift(); // Remove from the head of the ordered list
 
-          currentDeptIndex = (currentDeptIndex + 1) % deptNames.length;
-          attempts++;
-        }
-
-        if (!assigned) break;
+        allocations.push({
+          hall_id: hallId,
+          student_name: student.name,
+          registration_number: student.registration_number,
+          department_name: student.department,
+          seat_number: allocations.length + 1,
+          row_number: row,
+          column_number: col,
+          subject_id: subjectId,
+        });
       }
     }
-
     return allocations;
   };
 
@@ -514,7 +524,17 @@ const CreateExam = () => {
       console.log(`Total students: ${allStudents.length}, Total seats: ${totalSeats}`);
 
       if (allStudents.length > totalSeats) {
-        toast.error(`Not enough seats! You have ${allStudents.length} students but only ${totalSeats} seats available.`);
+        const deficit = allStudents.length - totalSeats;
+        const seatsPerHall = validatedData.benchRows * validatedData.benchColumns;
+        const extraHallsNeeded = Math.ceil(deficit / seatsPerHall);
+
+        toast.error(
+          `Capacity Mismatch! \n` +
+          `Students: ${allStudents.length} | Seats: ${totalSeats} \n` +
+          `You are short by ${deficit} seats. \n` +
+          `Suggestion: Add ${extraHallsNeeded} more hall(s) or increase bench rows/columns.`,
+          { duration: 8000 }
+        );
         setLoading(false);
         return;
       }
@@ -604,42 +624,40 @@ const CreateExam = () => {
 
       // Allocate seats - use a working copy to avoid mutating original
       const allAllocations = [];
-      const studentsToAllocate = [...allStudents];
-      
-      console.log(`Starting seat allocation for ${studentsToAllocate.length} students across ${halls.length} halls`);
-      
+
+      console.log(`Starting seat allocation for ${allStudents.length} students across ${halls.length} halls`);
+
       if (useSharedSeating) {
         // Same seating for all subjects
+        // Create ordered list of students based on shuffle logic
+        const studentList = getOrderedStudents(departments, shuffleClasses);
+
         for (const hall of halls) {
-          const seatsInHall = validatedData.benchRows * validatedData.benchColumns;
-          const studentsForHall = studentsToAllocate.splice(0, Math.min(seatsInHall, studentsToAllocate.length));
-          
-          const hallAllocations = allocateSeatsRoundRobin(
-            studentsForHall,
+          const hallAllocations = allocateSeats(
+            studentList,
             validatedData.benchRows,
             validatedData.benchColumns,
             hall.id
           );
-          
+
           allAllocations.push(...hallAllocations.map(a => ({ ...a, exam_id: exam.id })));
           console.log(`Hall ${hall.hall_name}: allocated ${hallAllocations.length} students`);
         }
       } else {
         // Different seating per subject
         for (const subject of subjectsData) {
-          const subjectStudents = [...allStudents];
+          // Re-create ordered list for each subject
+          const studentList = getOrderedStudents(departments, shuffleClasses);
+
           for (const hall of halls) {
-            const seatsInHall = validatedData.benchRows * validatedData.benchColumns;
-            const studentsForHall = subjectStudents.splice(0, Math.min(seatsInHall, subjectStudents.length));
-            
-            const hallAllocations = allocateSeatsRoundRobin(
-              studentsForHall,
+            const hallAllocations = allocateSeats(
+              studentList,
               validatedData.benchRows,
               validatedData.benchColumns,
               hall.id,
               subject.id
             );
-            
+
             allAllocations.push(...hallAllocations.map(a => ({ ...a, exam_id: exam.id })));
             console.log(`Hall ${hall.hall_name}, Subject ${subject.subject_name}: allocated ${hallAllocations.length} students`);
           }
@@ -821,6 +839,17 @@ const CreateExam = () => {
               </Label>
             </div>
 
+            <div className="flex items-center space-x-2">
+              <Switch
+                id="shuffle-classes"
+                checked={shuffleClasses}
+                onCheckedChange={setShuffleClasses}
+              />
+              <Label htmlFor="shuffle-classes" className="cursor-pointer">
+                Shuffle Classes (Pairwise - requires even number of departments)
+              </Label>
+            </div>
+
             {departments.length > 0 && (
               <div>
                 <Label>Departments & Student Lists</Label>
@@ -836,7 +865,7 @@ const CreateExam = () => {
                         />
                         <div className="flex items-start justify-between gap-2">
                           <div className="flex-1">
-                           <Input
+                            <Input
                               type="file"
                               accept=".csv"
                               onChange={(e) => handleDepartmentFileUpload(index, e.target.files?.[0] || null)}

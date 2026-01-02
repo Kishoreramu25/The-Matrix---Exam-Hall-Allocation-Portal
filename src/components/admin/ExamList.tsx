@@ -103,6 +103,14 @@ const ExamList = () => {
               <Button
                 variant="outline"
                 size="sm"
+                onClick={() => navigate(`/admin/edit/${exam.id}`)}
+              >
+                <span className="mr-2">✏️</span>
+                Edit
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={() => handleCopyLink(exam.exam_code)}
               >
                 <Copy className="mr-2 h-4 w-4" />

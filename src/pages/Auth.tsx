@@ -17,7 +17,7 @@ const signupSchema = z.object({
 });
 
 const loginSchema = z.object({
-  username: z.string().min(3, "Username must be at least 3 characters"),
+  email: z.string().email("Invalid email address"),
   password: z.string().min(6, "Password must be at least 6 characters"),
 });
 
@@ -41,20 +41,9 @@ const Auth = () => {
         // Validate login data
         const validatedData = loginSchema.parse(formData);
 
-        // Look up email by username
-        const { data: profile, error: lookupError } = await supabase
-          .from("profiles")
-          .select("email")
-          .eq("username", validatedData.username)
-          .single();
-
-        if (lookupError || !profile) {
-          throw new Error("Invalid username or password");
-        }
-
         // Sign in with email
         const { error } = await supabase.auth.signInWithPassword({
-          email: profile.email,
+          email: validatedData.email,
           password: validatedData.password,
         });
 
@@ -127,22 +116,22 @@ const Auth = () => {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <Label htmlFor="username">Username</Label>
-            <Input
-              id="username"
-              type="text"
-              placeholder="johndoe"
-              value={formData.username}
-              onChange={(e) =>
-                setFormData({ ...formData, username: e.target.value })
-              }
-              required
-            />
-          </div>
-
           {!isLogin && (
             <>
+              <div>
+                <Label htmlFor="username">Username</Label>
+                <Input
+                  id="username"
+                  type="text"
+                  placeholder="johndoe"
+                  value={formData.username}
+                  onChange={(e) =>
+                    setFormData({ ...formData, username: e.target.value })
+                  }
+                  required
+                />
+              </div>
+
               <div>
                 <Label htmlFor="fullName">Full Name</Label>
                 <Input
@@ -156,22 +145,22 @@ const Auth = () => {
                   required
                 />
               </div>
-
-              <div>
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="admin@college.edu"
-                  value={formData.email}
-                  onChange={(e) =>
-                    setFormData({ ...formData, email: e.target.value })
-                  }
-                  required
-                />
-              </div>
             </>
           )}
+
+          <div>
+            <Label htmlFor="email">Email</Label>
+            <Input
+              id="email"
+              type="email"
+              placeholder="admin@college.edu"
+              value={formData.email}
+              onChange={(e) =>
+                setFormData({ ...formData, email: e.target.value })
+              }
+              required
+            />
+          </div>
 
           <div>
             <Label htmlFor="password">Password</Label>
@@ -197,9 +186,7 @@ const Auth = () => {
             onClick={() => setIsLogin(!isLogin)}
             className="text-sm text-primary hover:underline"
           >
-            {isLogin
-              ? "Don't have an account? Sign up"
-              : "Already have an account? Login"}
+            {isLogin ? "Don't have an account? Sign up" : "Already have an account? Login"}
           </button>
         </div>
       </Card>
