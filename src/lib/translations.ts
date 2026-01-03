@@ -57,6 +57,14 @@ export const translations = {
         "feedback.content": "Your Feedback",
         "send.whatsapp": "Send via WhatsApp",
         "fill.all.fields": "Please fill in all fields",
+
+        // Contact Us
+        "contact.us": "Contact Us",
+        "contact.desc": "Get in touch with us",
+        "phone": "Phone",
+        "email": "Email",
+        "linkedin": "LinkedIn",
+        "instagram": "Instagram",
     },
     ta: {
         // Common
@@ -116,6 +124,14 @@ export const translations = {
         "feedback.content": "உங்கள் கருத்து",
         "send.whatsapp": "வாட்ஸ்அப் மூலம் அனுப்பவும்",
         "fill.all.fields": "தயவுசெய்து அனைத்து புலங்களையும் நிரப்பவும்",
+
+        // Contact Us
+        "contact.us": "எங்களை தொடர்பு கொள்ள",
+        "contact.desc": "எங்களுடன் தொடர்பு கொள்ளுங்கள்",
+        "phone": "தொலைபேசி",
+        "email": "மின்னஞ்சல்",
+        "linkedin": "லிங்க்ட்இன்",
+        "instagram": "இன்ஸ்டாகிராம்",
     },
     hi: {
         // Common
@@ -175,6 +191,14 @@ export const translations = {
         "feedback.content": "आपकी प्रतिक्रिया",
         "send.whatsapp": "व्हाट्सएप के माध्यम से भेजें",
         "fill.all.fields": "कृपया सभी फ़ील्ड भरें",
+
+        // Contact Us
+        "contact.us": "संपर्क करें",
+        "contact.desc": "हमसे संपर्क करें",
+        "phone": "फ़ोन",
+        "email": "ईमेल",
+        "linkedin": "लिंक्डइन",
+        "instagram": "इंस्टाग्राम",
     }
 };
 

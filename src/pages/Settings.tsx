@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Moon, Sun, Palette, Globe, Check, MessageCircle } from "lucide-react";
+import { Moon, Sun, Palette, Globe, Check, MessageCircle, Phone, Mail, Linkedin, Instagram } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -171,6 +171,49 @@ const Settings = () => {
                         >
                             {t("feedback.title")}
                         </Button>
+                    </Card>
+
+                    {/* Contact Us Section */}
+                    <Card className="p-6">
+                        <div className="flex items-center gap-3 mb-4">
+                            <Phone className="h-5 w-5" />
+                            <div>
+                                <h2 className="font-semibold text-lg">{t("contact.us")}</h2>
+                                <p className="text-sm text-muted-foreground">
+                                    {t("contact.desc")}
+                                </p>
+                            </div>
+                        </div>
+                        <div className="space-y-4">
+                            <a href="tel:9042427828" className="flex items-center gap-3 p-3 rounded-lg bg-secondary/50 hover:bg-secondary transition-colors">
+                                <Phone className="h-5 w-5 text-primary" />
+                                <div>
+                                    <p className="text-sm font-medium">{t("phone")}</p>
+                                    <p className="text-sm text-muted-foreground">9042427828</p>
+                                </div>
+                            </a>
+                            <a href="mailto:zenetive@gmail.com" className="flex items-center gap-3 p-3 rounded-lg bg-secondary/50 hover:bg-secondary transition-colors">
+                                <Mail className="h-5 w-5 text-primary" />
+                                <div>
+                                    <p className="text-sm font-medium">{t("email")}</p>
+                                    <p className="text-sm text-muted-foreground">zenetive@gmail.com</p>
+                                </div>
+                            </a>
+                            <a href="https://www.linkedin.com/company/108417519/admin/dashboard/" target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 p-3 rounded-lg bg-secondary/50 hover:bg-secondary transition-colors">
+                                <Linkedin className="h-5 w-5 text-primary" />
+                                <div>
+                                    <p className="text-sm font-medium">{t("linkedin")}</p>
+                                    <p className="text-sm text-muted-foreground">Zenetive Infotech</p>
+                                </div>
+                            </a>
+                            <a href="https://www.instagram.com/zenetive.india?igsh=cXo1NXp3ODJmZGVv" target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 p-3 rounded-lg bg-secondary/50 hover:bg-secondary transition-colors">
+                                <Instagram className="h-5 w-5 text-primary" />
+                                <div>
+                                    <p className="text-sm font-medium">{t("instagram")}</p>
+                                    <p className="text-sm text-muted-foreground">@zenetive.india</p>
+                                </div>
+                            </a>
+                        </div>
                     </Card>
                 </div>
             </div>
