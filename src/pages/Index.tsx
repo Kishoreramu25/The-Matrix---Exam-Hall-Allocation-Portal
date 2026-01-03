@@ -1,27 +1,56 @@
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { useNavigate } from "react-router-dom";
-import { GraduationCap, LayoutGrid } from "lucide-react";
+import { GraduationCap, LayoutGrid, Moon, Sun } from "lucide-react";
+import { useState, useEffect } from "react";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 const Index = () => {
   const navigate = useNavigate();
+  const { t } = useLanguage();
+  const [isDark, setIsDark] = useState(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("theme") === "dark" ||
+        (!localStorage.getItem("theme") && window.matchMedia("(prefers-color-scheme: dark)").matches);
+    }
+    return false;
+  });
+
+  useEffect(() => {
+    const root = window.document.documentElement;
+    if (isDark) {
+      root.classList.add("dark");
+      localStorage.setItem("theme", "dark");
+    } else {
+      root.classList.remove("dark");
+      localStorage.setItem("theme", "light");
+    }
+  }, [isDark]);
 
   return (
     <div className="min-h-screen bg-background pb-20">
       {/* Instagram-like Header */}
       <div className="sticky top-0 z-40 bg-background/80 backdrop-blur-md border-b border-border px-4 py-3 flex items-center justify-between">
-        <h1 className="text-xl font-bold tracking-tight">THE MATRIX</h1>
-        <div className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center">
-          <span className="text-xs font-bold">TM</span>
+        <div className="flex items-center gap-2">
+          <img src="/app-logo.jpg" alt="Logo" className="h-8 w-auto object-contain" />
+          <h1 className="text-xl font-bold tracking-tight">{t("app.name")}</h1>
         </div>
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => setIsDark(!isDark)}
+          className="rounded-full w-8 h-8 bg-secondary"
+        >
+          {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+        </Button>
       </div>
 
       <div className="container mx-auto px-4 py-6 space-y-6 max-w-md">
         {/* Welcome Story/Banner */}
         <div className="bg-gradient-to-r from-primary/20 to-accent/50 p-6 rounded-2xl mb-8">
-          <h2 className="text-2xl font-bold mb-2">Welcome Back</h2>
+          <h2 className="text-2xl font-bold mb-2">{t("welcome.back")}</h2>
           <p className="text-muted-foreground text-sm">
-            Manage exams and find your seats instantly.
+            {t("welcome.subtitle")}
           </p>
         </div>
 
@@ -33,16 +62,16 @@ const Index = () => {
                 <LayoutGrid className="w-8 h-8 text-primary" />
               </div>
               <div>
-                <h3 className="text-lg font-bold">Admin Portal</h3>
+                <h3 className="text-lg font-bold">{t("admin.portal")}</h3>
                 <p className="text-sm text-muted-foreground mt-1">
-                  Create exams & manage allocations
+                  {t("admin.desc")}
                 </p>
               </div>
               <Button
                 onClick={() => navigate("/admin")}
                 className="w-full btn-primary rounded-xl"
               >
-                Admin Login
+                {t("admin.login")}
               </Button>
             </div>
           </Card>
@@ -53,25 +82,27 @@ const Index = () => {
                 <GraduationCap className="w-8 h-8 text-primary" />
               </div>
               <div>
-                <h3 className="text-lg font-bold">Student Portal</h3>
+                <h3 className="text-lg font-bold">{t("student.portal")}</h3>
                 <p className="text-sm text-muted-foreground mt-1">
-                  Find your seat instantly
+                  {t("student.desc")}
                 </p>
               </div>
               <Button
                 onClick={() => navigate("/student")}
                 className="w-full btn-primary rounded-xl"
               >
-                Find My Seat
+                {t("student.find")}
               </Button>
             </div>
           </Card>
+
+
         </div>
 
         {/* Footer */}
         <div className="text-center mt-8 pb-4">
           <p className="text-xs text-muted-foreground font-medium">
-            © 2026 Zenetive Infotech. All rights reserved.
+            {t("footer.rights")}
           </p>
         </div>
       </div>

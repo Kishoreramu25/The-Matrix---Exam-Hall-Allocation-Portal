@@ -61,9 +61,30 @@ const CreateExam = () => {
   });
 
   const handleNumberOfHallsChange = (value: number) => {
-    setFormData({ ...formData, numberOfHalls: value });
-    setHallNames(Array(value).fill(""));
-    setHallLocationLinks(Array(value).fill(""));
+    setFormData(prev => ({ ...prev, numberOfHalls: value }));
+    setHallNames(prev => {
+      const newNames = Array(value).fill("");
+      return newNames.map((_, i) => prev[i] || "");
+    });
+    setHallLocationLinks(prev => {
+      const newLinks = Array(value).fill("");
+      return newLinks.map((_, i) => prev[i] || "");
+    });
+  };
+
+  const updateHallsBasedOnStudents = (currentDepts: Department[], rows: number, cols: number) => {
+    if (rows <= 0 || cols <= 0) return;
+
+    const totalStudents = currentDepts.reduce((sum, dept) => sum + (dept.students?.length || 0), 0);
+    if (totalStudents === 0) return;
+
+    const capacityPerHall = rows * cols;
+    const requiredHalls = Math.ceil(totalStudents / capacityPerHall);
+
+    if (requiredHalls > 0) {
+      handleNumberOfHallsChange(requiredHalls);
+      toast.info(`Auto-set Number of Halls to ${requiredHalls} based on ${totalStudents} students.`);
+    }
   };
 
   const handleHallNameChange = (index: number, name: string) => {
@@ -354,6 +375,9 @@ const CreateExam = () => {
       };
       setDepartments(newDepts);
 
+      // Auto-calculate halls
+      updateHallsBasedOnStudents(newDepts, formData.benchRows, formData.benchColumns);
+
       toast.success(`✓ ${students.length}/${report.totalRows} valid • Missing Name: ${report.missingName}, Reg: ${report.missingReg}, Duplicates: ${report.duplicatesWithinFile} (${departments[index].name})`);
     } catch (error: any) {
       console.error("File upload error:", error);
@@ -376,8 +400,13 @@ const CreateExam = () => {
   };
 
   const handleClearDepartment = (index: number) => {
-    handleDepartmentChange(index, "students", []);
-    handleDepartmentChange(index, "file", null);
+    const newDepts = [...departments];
+    newDepts[index] = { ...newDepts[index], students: [], file: null };
+    setDepartments(newDepts);
+
+    // Recalculate halls
+    updateHallsBasedOnStudents(newDepts, formData.benchRows, formData.benchColumns);
+
     setParsingStatus((prev) => {
       const arr = [...prev];
       arr[index] = false;
@@ -615,12 +644,19 @@ const CreateExam = () => {
         location_link: hallLocationLinks[index] || null,
       }));
 
-      const { data: halls, error: hallsError } = await supabase
+      const { data: hallsData, error: hallsError } = await supabase
         .from("halls")
         .insert(hallsToInsert)
         .select();
 
       if (hallsError) throw hallsError;
+
+      // Sort halls numerically to ensure allocation follows Hall 1, 2, 3... order
+      const halls = [...hallsData].sort((a, b) => {
+        const numA = parseInt(a.hall_name.replace(/\D/g, '')) || 0;
+        const numB = parseInt(b.hall_name.replace(/\D/g, '')) || 0;
+        return numA - numB;
+      });
 
       // Allocate seats - use a working copy to avoid mutating original
       const allAllocations = [];
@@ -777,12 +813,11 @@ const CreateExam = () => {
                   type="number"
                   min="1"
                   value={formData.benchRows || ""}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      benchRows: parseInt(e.target.value) || 0,
-                    })
-                  }
+                  onChange={(e) => {
+                    const val = parseInt(e.target.value) || 0;
+                    setFormData({ ...formData, benchRows: val });
+                    updateHallsBasedOnStudents(departments, val, formData.benchColumns);
+                  }}
                   required
                 />
               </div>
@@ -794,12 +829,11 @@ const CreateExam = () => {
                   type="number"
                   min="1"
                   value={formData.benchColumns || ""}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      benchColumns: parseInt(e.target.value) || 0,
-                    })
-                  }
+                  onChange={(e) => {
+                    const val = parseInt(e.target.value) || 0;
+                    setFormData({ ...formData, benchColumns: val });
+                    updateHallsBasedOnStudents(departments, formData.benchRows, val);
+                  }}
                   required
                 />
               </div>

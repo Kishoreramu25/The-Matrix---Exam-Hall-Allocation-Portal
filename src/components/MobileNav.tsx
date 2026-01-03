@@ -1,4 +1,4 @@
-import { Home, GraduationCap, LayoutGrid } from "lucide-react";
+import { Home, GraduationCap, LayoutGrid, Settings } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 
 const MobileNav = () => {
@@ -31,6 +31,14 @@ const MobileNav = () => {
                         }`}
                 >
                     <LayoutGrid className={`h-7 w-7 ${isActive("/admin") ? "fill-current" : ""}`} strokeWidth={isActive("/admin") ? 2.5 : 2} />
+                </Link>
+
+                <Link
+                    to="/settings"
+                    className={`p-2 rounded-full transition-all duration-300 ${isActive("/settings") ? "text-primary scale-110" : "text-muted-foreground hover:text-foreground"
+                        }`}
+                >
+                    <Settings className={`h-7 w-7 ${isActive("/settings") ? "fill-current" : ""}`} strokeWidth={isActive("/settings") ? 2.5 : 2} />
                 </Link>
             </div>
         </div>

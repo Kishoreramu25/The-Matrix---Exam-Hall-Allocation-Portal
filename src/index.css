@@ -6,9 +6,7 @@
   :root {
     /* Instagram Light Mode Palette */
     --background: 0 0% 100%;
-    /* #FFFFFF */
     --foreground: 0 0% 15%;
-    /* #262626 */
 
     --card: 0 0% 100%;
     --card-foreground: 0 0% 15%;
@@ -18,17 +16,13 @@
 
     /* Vibrant Yellow (User Preference) replacing IG Blue */
     --primary: 48 100% 50%;
-    /* #FFD600 */
     --primary-foreground: 0 0% 0%;
-    /* Black text on yellow */
 
     --secondary: 0 0% 98%;
-    /* #FAFAFA */
     --secondary-foreground: 0 0% 15%;
 
     --muted: 0 0% 96%;
     --muted-foreground: 0 0% 55%;
-    /* #8E8E8E */
 
     --accent: 0 0% 98%;
     --accent-foreground: 0 0% 15%;
@@ -37,50 +31,41 @@
     --destructive-foreground: 0 0% 98%;
 
     --border: 0 0% 86%;
-    /* #DBDBDB */
     --input: 0 0% 96%;
-    /* #FAFAFA */
     --ring: 48 100% 50%;
 
     --radius: 0.5rem;
-    /* 8px - standard IG radius */
   }
 
   .dark {
-    /* Instagram Dark Mode Palette */
-    --background: 0 0% 0%;
-    /* #000000 */
+    /* Custom Dark Theme Palette */
+    --background: 270 8% 10%;
     --foreground: 0 0% 98%;
-    /* #FAFAFA */
 
-    --card: 0 0% 0%;
+    --card: 220 4% 15%;
     --card-foreground: 0 0% 98%;
 
-    --popover: 0 0% 10%;
-    /* #1A1A1A */
+    --popover: 220 4% 15%;
     --popover-foreground: 0 0% 98%;
 
-    --primary: 48 100% 50%;
+    --primary: 43 72% 48%;
     --primary-foreground: 0 0% 0%;
 
-    --secondary: 0 0% 7%;
-    /* #121212 */
+    --secondary: 220 4% 15%;
     --secondary-foreground: 0 0% 98%;
 
-    --muted: 0 0% 15%;
+    --muted: 270 8% 15%;
     --muted-foreground: 0 0% 65%;
 
-    --accent: 0 0% 10%;
+    --accent: 220 4% 20%;
     --accent-foreground: 0 0% 98%;
 
-    --destructive: 0 62.8% 30.6%;
+    --destructive: 345 100% 18%;
     --destructive-foreground: 0 0% 98%;
 
-    --border: 0 0% 22%;
-    /* #363636 */
-    --input: 0 0% 15%;
-    /* #262626 */
-    --ring: 48 100% 50%;
+    --border: 220 4% 25%;
+    --input: 220 4% 15%;
+    --ring: 43 72% 48%;
   }
 }
 
